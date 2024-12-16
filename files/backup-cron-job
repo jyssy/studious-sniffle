@@ -1,0 +1,3 @@
+
+# Run backup daily at 2 AM
+0 2 * * * root /opt/backup-scripts/test.sh >> /var/log/test-cron-log 2>&1

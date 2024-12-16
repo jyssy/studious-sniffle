@@ -1,0 +1,9 @@
+# working files
+.env
+*.mysql
+*.sqlite
+.DS_Store
+
+# terraform related files
+*.tfstate
+*.tfstate.backup
