@@ -1,6 +1,4 @@
 
-name: access-opsportal
-
 services:
 
   drupal:
@@ -11,17 +9,21 @@ services:
     environment:
       AWS_ACCESS_KEY_ID: '${AWS_ACCESS_KEY_ID}'
       AWS_SECRET_ACCESS_KEY: '${AWS_SECRET_ACCESS_KEY}'
-      AWS_DEFAULT_REGION: '${AWS_DEFAULT_REGION}'
+      AWS_DEFAULT_REGION: 'us-east-2'
       MYSQL_DATABASE: 'drupal'
       MYSQL_USER: 'drupaldbuser'
       MYSQL_PASSWORD: '${MYSQL_PASSWORD}'
       MYSQL_HOST: 'mysql'
       S3_BACKUP_LOCATION: '/var/www/html/backups0test'
     volumes:
-      - ./opsportal:/var/www/html/opsportal
-      - ./files/000-default.conf:/etc/apache2/sites-available/000-default.conf
-      - ./themes:/var/www/html/themes
-      - ./backups:/var/www/html/backups
+        - composer_cache:/root/.composer/cache
+        - drupal_modules:/var/www/html/modules
+        - drupal_profiles:/var/www/html/profiles
+        - drupal_sites:/var/www/html/sites
+        - drupal_themes:/var/www/html/themes
+        - ./opsportal:/var/www/html/opsportal
+        - ./files/000-default.conf:/etc/apache2/sites-available/000-default.conf
+        - ./backups:/var/www/html/backups
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.apache.rule=Host(`localhost`)"
@@ -43,25 +45,25 @@ services:
       "
 
   # Rest of the services remain unchanged
-    mysql:
-        image: mysql:latest
-        restart: always
-        labels:
-          - "traefik.enable=false"
-        environment:
-          MYSQL_ROOT_PASSWORD: '${MYSQL_ROOT_PASSWORD}'
-          MYSQL_DATABASE: 'drupal'
-          MYSQL_USER: ${MYSQL_PASSWORD}
-          MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-        ports:
-          - "3306:3306"
-        volumes:
-          - ./mysql-data:/var/lib/mysql
-          - ./mysql-backups/*.mysql:/docker-entrypoint-initdb.d/dump.sql
-        cpu_shares: 512
-        mem_limit: 2g
-        networks:
-          - drupal_network
+  mysql:
+      image: mysql:latest
+      restart: always
+      labels:
+        - "traefik.enable=false"
+      environment:
+        MYSQL_ROOT_PASSWORD: '${MYSQL_ROOT_PASSWORD}'
+        MYSQL_DATABASE: 'drupal'
+        MYSQL_USER: ${MYSQL_PASSWORD}
+        MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      ports:
+        - "3306:3306"
+      volumes:
+        - ./mysql-data:/var/lib/mysql
+        - ./mysql-backups:/docker-entrypoint-initdb.d
+      cpu_shares: 512
+      mem_limit: 2g
+      networks:
+        - drupal_network
 
   phpmyadmin:
       image: phpmyadmin/phpmyadmin:latest
@@ -107,3 +109,11 @@ services:
 networks:
   drupal_network:
     name: drupal_network
+
+volumes:
+  composer_cache:
+  drupal_modules:
+  drupal_profiles:
+  drupal_sites:
+  drupal_themes:
+  mysql-data:
