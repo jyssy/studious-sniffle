@@ -1,4 +1,3 @@
-
 services:
 
   drupal:
@@ -16,24 +15,31 @@ services:
       MYSQL_HOST: 'mysql'
       S3_BACKUP_LOCATION: '/var/www/html/backups0test'
     volumes:
-        - composer_cache:/root/.composer/cache
-        - drupal_modules:/var/www/html/modules
-        - drupal_profiles:/var/www/html/profiles
-        - drupal_sites:/var/www/html/sites
-        - drupal_themes:/var/www/html/themes
-        - ./opsportal:/var/www/html/opsportal
-        - ./files/000-default.conf:/etc/apache2/sites-available/000-default.conf
-        - ./backups:/var/www/html/backups
+      - composer_cache:/root/.composer/cache
+      - drupal_modules:/var/www/html/modules
+      - drupal_profiles:/var/www/html/profiles
+      - drupal_sites:/var/www/html/sites
+      - drupal_themes:/var/www/html/themes
+      - ./opsportal:/var/www/html/opsportal
+      - ./files/000-default.conf:/etc/apache2/sites-available/000-default.conf
+      - ./backups:/var/www/html/backups
+      - ./backup-scripts:/opt/backup-scripts
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.apache.rule=Host(`localhost`)"
       - "traefik.http.routers.apache.entrypoints=web"
       - "traefik.http.routers.apache.entrypoints=websecure"
       - "traefik.http.routers.apache.tls.certresolver=myresolver"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      mysql:
+        condition: service_healthy
     cpu_shares: 512
     mem_limit: 2g
-    depends_on:
-      - mysql
     networks:
       - drupal_network
     entrypoint: >
@@ -44,64 +50,77 @@ services:
         supervisord -n
       "
 
-  # Rest of the services remain unchanged
   mysql:
-      image: mysql:latest
-      restart: always
-      labels:
-        - "traefik.enable=false"
-      environment:
-        MYSQL_ROOT_PASSWORD: '${MYSQL_ROOT_PASSWORD}'
-        MYSQL_DATABASE: 'drupal'
-        MYSQL_USER: ${MYSQL_PASSWORD}
-        MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-      ports:
-        - "3306:3306"
-      volumes:
-        - ./mysql-data:/var/lib/mysql
-        - ./mysql-backups:/docker-entrypoint-initdb.d
-      cpu_shares: 512
-      mem_limit: 2g
-      networks:
-        - drupal_network
+    image: mysql:latest
+    restart: always
+    labels:
+      - "traefik.enable=false"
+    environment:
+      MYSQL_ROOT_PASSWORD: '${MYSQL_ROOT_PASSWORD}'
+      MYSQL_DATABASE: 'drupal'
+      MYSQL_USER: 'drupaldbuser'
+      MYSQL_PASSWORD: '${MYSQL_PASSWORD}'
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./mysql-data:/var/lib/mysql
+      - ./mysql-backups:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    cpu_shares: 512
+    mem_limit: 2g
+    networks:
+      - drupal_network
 
   phpmyadmin:
-      image: phpmyadmin/phpmyadmin:latest
-      labels:
-        - "traefik.enable=false"
-      restart: always
-      environment:
-        PMA_HOST: 'mysql'
-      depends_on:
-        - mysql
-      cpu_shares: 128
-      mem_limit: 256m
-      networks:
-        - drupal_network
+    image: phpmyadmin/phpmyadmin:latest
+    labels:
+          - "traefik.enable=true"
+          - "traefik.http.routers.phpmyadmin.rule=Host(`phpmyadmin.localhost`)"  # what should we use for the domain?
+          - "traefik.http.routers.phpmyadmin.entrypoints=websecure"
+          - "traefik.http.routers.phpmyadmin.tls.certresolver=myresolver"
+    restart: always
+    environment:
+      PMA_HOST: 'mysql'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      mysql:
+        condition: service_healthy
+    cpu_shares: 128
+    mem_limit: 256m
+    networks:
+      - drupal_network
 
   traefik:
-      image: traefik:v3.0
-      restart: always
-      command:
-        - "--api.insecure=true"
-        - "--providers.docker=true"
-        - "--entrypoints.web.address=:80"
-        - "--entrypoints.traefik.address=:8080"
-        - "--api.dashboard=true"
-        - "--entrypoints.websecure.address=:443"
-        - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
-        - "--certificatesresolvers.myresolver.acme.email=jelambe@iu.edu"
-        - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
-      ports:
-        - "80:80"
-        - "443:443"
-        - "8080:8080"
-      volumes:
-        - /var/run/docker.sock:/var/run/docker.sock
-        - "./letsencrypt:/letsencrypt"
-      networks:
-        - drupal_network
-      labels:
+    image: traefik:v3.0
+    restart: always
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.traefik.address=:8080"
+      - "--api.dashboard=true"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+      - "--certificatesresolvers.myresolver.acme.email=jelambe@iu.edu"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - "./letsencrypt:/letsencrypt"
+    networks:
+      - drupal_network
+    labels:
       - "traefik.enable=true"
       - "traefik.http.routers.traefik-dashboard.rule=Host(`URL`)"
       - "traefik.http.routers.traefik-dashboard.service=api@internal"
