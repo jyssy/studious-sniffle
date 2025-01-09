@@ -10,10 +10,15 @@ services:
       AWS_SECRET_ACCESS_KEY: '${AWS_SECRET_ACCESS_KEY}'
       AWS_DEFAULT_REGION: 'us-east-2'
       MYSQL_DATABASE: 'drupal'
-      MYSQL_USER: 'drupaldbuser'
+      MYSQL_USER: '${MYSQL_USER}'
       MYSQL_PASSWORD: '${MYSQL_PASSWORD}'
       MYSQL_HOST: 'mysql'
       S3_BACKUP_LOCATION: '/var/www/html/backups0test'
+      DRUPAL_DATABASE_HOST: mysql
+      DRUPAL_DATABASE_PORT: 3306
+      DRUPAL_DATABASE_NAME: drupal
+      DRUPAL_DATABASE_USERNAME: ${MYSQL_USER}
+      DRUPAL_DATABASE_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
       - composer_cache:/root/.composer/cache
       - drupal_modules:/var/www/html/modules
@@ -26,10 +31,10 @@ services:
       - ./backup-scripts:/opt/backup-scripts
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.apache.rule=Host(`localhost`)"
-      - "traefik.http.routers.apache.entrypoints=web"
-      - "traefik.http.routers.apache.entrypoints=websecure"
-      - "traefik.http.routers.apache.tls.certresolver=myresolver"
+      - "traefik.http.routers.drupal.rule=Host(`drupal.localhost`)"
+      - "traefik.http.routers.drupal.entrypoints=web,websecure"
+      - "traefik.http.services.drupal.loadbalancer.server.port=80"
+      - "traefik.http.routers.drupal.tls.certresolver=myresolver"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost"]
       interval: 30s
@@ -49,8 +54,6 @@ services:
         supervisord -n
       "
 
-
-
   mysql:
     image: mysql:latest
     restart: always
@@ -59,7 +62,7 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: '${MYSQL_ROOT_PASSWORD}'
       MYSQL_DATABASE: 'drupal'
-      MYSQL_USER: 'drupaldbuser'
+      MYSQL_USER: '${MYSQL_USER}'
       MYSQL_PASSWORD: '${MYSQL_PASSWORD}'
     ports:
       - "3306:3306"
@@ -77,27 +80,34 @@ services:
       - drupal_network
 
   phpmyadmin:
-    image: phpmyadmin/phpmyadmin:latest
-    labels:
-          - "traefik.enable=true"
-          - "traefik.http.routers.phpmyadmin.rule=Host(`phpmyadmin.localhost`)"  # what should we use for the domain?
-          - "traefik.http.routers.phpmyadmin.entrypoints=websecure"
-          - "traefik.http.routers.phpmyadmin.tls.certresolver=myresolver"
-    restart: always
-    environment:
-      PMA_HOST: 'mysql'
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    depends_on:
-      mysql:
-        condition: service_healthy
-    cpu_shares: 128
-    mem_limit: 256m
-    networks:
-      - drupal_network
+      image: arm64v8/phpmyadmin:latest
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.phpmyadmin.rule=Host(`phpmyadmin.localhost`)"
+        - "traefik.http.routers.phpmyadmin.entrypoints=websecure"
+        - "traefik.http.routers.phpmyadmin.tls.certresolver=myresolver"
+      restart: always
+      environment:
+        - PMA_HOST=mysql
+        - PMA_PORT=3306
+        - UPLOAD_LIMIT=300M
+        - MAX_EXECUTION_TIME=600
+      healthcheck:
+        test: ["CMD", "wget", "-O", "/dev/null", "http://localhost:80/"]
+        interval: 30s
+        timeout: 10s
+        retries: 3
+        start_period: 30s
+      depends_on:
+        mysql:
+          condition: service_healthy
+      deploy:
+        resources:
+          limits:
+            cpus: '0.5'
+            memory: 256M
+      networks:
+        - drupal_network
 
   traefik:
     image: traefik:v3.0
