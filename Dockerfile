@@ -1,8 +1,8 @@
 FROM php:8.3-apache-bookworm
 
 # Install Composer
-COPY --from=composer:2 /usr/bin/composer /usr/local/bin/
-RUN chmod +x /usr/bin/composer
+COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
+RUN chmod +x /usr/local/bin/composer
 
 # System dependencies and PHP extensions
 RUN set -eux; \
@@ -74,6 +74,7 @@ ENV COMPOSER_ALLOW_SUPERUSER=1
 RUN mkdir -p /var/www/html/themes /var/www/html/backups /opt/backup-scripts && \
     touch /var/log/cron.log /var/log/apache2/access.log /var/log/apache2/error.log /var/log/test-cron-log && \
     chmod 0644 /var/log/test-cron-log && \
+    git clone https://github.com/access-ci-org/Operations_Drupal_Theme.git /var/www/html/themes/custom && \
     chown -R www-data:www-data /var/www/html
 
 # Copy configuration files

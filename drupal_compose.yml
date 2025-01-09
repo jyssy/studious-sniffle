@@ -44,11 +44,12 @@ services:
       - drupal_network
     entrypoint: >
       bash -c "
-        rm -rf /var/www/html/themes/custom &&
-        git clone https://github.com/access-ci-org/Operations_Drupal_Theme.git /var/www/html/themes/custom &&
-        drush sql-dump --result-file=/var/www/html/backups/backup-$(date +'%Y%m%d-%H%M%S').sql &&
+        drush theme:enable operations_drupal_theme &&
+        drush config-set system.theme default operations_drupal_theme -y &&
         supervisord -n
       "
+
+
 
   mysql:
     image: mysql:latest
