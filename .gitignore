@@ -3,6 +3,9 @@
 *.mysql
 *.sqlite
 .DS_Store
+letsencrypt/
+*.json
+mysql-data/
 
 # terraform related files
 *.tfstate
