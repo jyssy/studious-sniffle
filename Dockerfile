@@ -1,11 +1,12 @@
 FROM php:8.3-apache-bookworm
 
 # Install Composer
-COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
-RUN chmod +x /usr/bin/composer
+COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
+RUN chmod +x /usr/local/bin/composer
 
 # System dependencies and PHP extensions
 RUN set -eux; \
+    savedAptMark="$(apt-mark showmanual)"; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
         libfreetype6-dev \
@@ -24,19 +25,40 @@ RUN set -eux; \
         python3 \
         python3-pip \
         nano \
-        awscli
-
-# Configure and install PHP extensions
-RUN docker-php-ext-configure gd \
+        awscli; \
+    \
+    docker-php-ext-configure gd \
         --with-freetype \
         --with-jpeg=/usr \
         --with-webp \
-    && docker-php-ext-install -j "$(nproc)" \
+    ; \
+    \
+    docker-php-ext-install -j "$(nproc)" \
         gd \
         opcache \
         pdo_mysql \
         pdo_pgsql \
-        zip
+        zip \
+    ; \
+    \
+    # Reset apt-mark's "manual" list so that "purge --auto-remove" will remove all build dependencies
+    apt-mark auto '.*' > /dev/null; \
+    apt-mark manual $savedAptMark; \
+    ldd "$(php -r 'echo ini_get("extension_dir");')"/*.so \
+        | awk '/=>/ { so = $(NF-1); if (index(so, "/usr/local/") == 1) { next }; gsub("^/(usr/)?", "", so); printf "*%s\n", so }' \
+        | sort -u \
+        | xargs -r dpkg-query -S \
+        | cut -d: -f1 \
+        | sort -u \
+        | xargs -rt apt-mark manual
+
+# Set recommended PHP.ini settings
+RUN { \
+    echo 'opcache.memory_consumption=128'; \
+    echo 'opcache.interned_strings_buffer=8'; \
+    echo 'opcache.max_accelerated_files=4000'; \
+    echo 'opcache.revalidate_freq=60'; \
+} > /usr/local/etc/php/conf.d/opcache-recommended.ini
 
 # Enable Apache modules
 RUN set -eux; \
@@ -52,6 +74,7 @@ ENV COMPOSER_ALLOW_SUPERUSER=1
 RUN mkdir -p /var/www/html/themes /var/www/html/backups /opt/backup-scripts && \
     touch /var/log/cron.log /var/log/apache2/access.log /var/log/apache2/error.log /var/log/test-cron-log && \
     chmod 0644 /var/log/test-cron-log && \
+    git clone https://github.com/access-ci-org/Operations_Drupal_Theme.git /var/www/html/themes/custom && \
     chown -R www-data:www-data /var/www/html
 
 # Copy configuration files
