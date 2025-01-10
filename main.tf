@@ -15,9 +15,9 @@ provider "aws" {
 
 resource "aws_instance" "app_server" {
   ami           = "ami-830c94e3"
-  instance_type = "t2.micro"
+  instance_type = "c6gd.large"
 
   tags = {
-    Name = "drupal_docker"
+    Name = "operations3"
   }
 }
